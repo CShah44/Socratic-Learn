@@ -7,22 +7,48 @@ const gemini = new RemoteRunnable({
   url: "http://localhost:3000/api/gemini",
 });
 
-export async function getGeminiResponse(prompt: string) {
-  const response = await gemini.stream({
+async function* makeIterator(prompt: string) {
+  const stream = await gemini.stream({
     // input: {
     //   prompt: prompt,
     // },
     messages: [new HumanMessage(prompt)],
   });
 
-  let count = 0;
-
-  for await (const chunk of response) {
-    count++;
-    // console.log(chunk);
+  for await (const chunk of stream) {
+    const answerChunk = chunk as any;
+    if (answerChunk.content) {
+      yield answerChunk.content;
+    }
   }
+}
 
-  console.log(count);
+function iteratorToStream(iterator: any) {
+  return new ReadableStream({
+    async pull(controller) {
+      const { value, done } = await iterator.next();
 
-  return count;
+      if (done) {
+        controller.close();
+      } else {
+        controller.enqueue(value);
+      }
+    },
+  });
+}
+
+export async function getGeminiResponse(prompt: string) {
+  // const iterator = makeIterator(prompt);
+  // const stream = iteratorToStream(iterator);
+
+  // return new Response(stream);
+
+  const res = await gemini.stream({
+    // input: {
+    //   prompt: prompt,
+    // },
+    messages: [new HumanMessage(prompt)],
+  });
+
+  return JSON.parse(JSON.stringify(res));
 }
